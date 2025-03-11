@@ -5,17 +5,19 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import threading
 
-# Load the trained model
 model = tf.keras.models.load_model("face_detector_model.h5")
+model.summary()
 
 categories = ["angry", "happy", "neutral", "sad", "surprise"]
 
+
 def predict_expression(face_img):
-    face_img = cv2.resize(face_img, (48, 48))
+    face_img = cv2.resize(face_img, (128, 128))
     face_img = np.expand_dims(face_img, axis=-1)  
     face_img = np.expand_dims(face_img, axis=0) 
     face_img = face_img / 255.0  
-    
+    print("Processed image shape:", face_img.shape)
+
     predictions = model.predict(face_img)
     return predictions.flatten()
 
@@ -44,6 +46,7 @@ def update_graph():
 
 graph_thread = threading.Thread(target=update_graph, daemon=True)
 graph_thread.start()
+
 
 while True:
     ret, frame = cap.read()
