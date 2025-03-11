@@ -62,7 +62,7 @@ model = Sequential([
     Conv2D(256, (3, 3), activation='relu'),
     BatchNormalization(),
     MaxPooling2D((2, 2)),
-    Dropout(0.3),  # Helps prevent overfitting
+    Dropout(0.3),  
 
     Flatten(),
     Dense(256, activation='relu'),
