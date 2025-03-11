@@ -22,7 +22,7 @@ def load_images_from_folder(folderPath):
                 img = cv2.resize(img, imageSize) / 255.0 
                 X.append(img.flatten())  
                 y.append(label)
-                print(imgPath + ": image loaded successfully")
+                print(imgPath + ": image loaded")
     return np.array(X, dtype=np.float32), np.array(y).reshape(-1, 1)
 
 XTrain, yTrain = load_images_from_folder(trainDatasetPath)
