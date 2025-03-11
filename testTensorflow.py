@@ -1,75 +1,86 @@
-import tensorflow as tf
-from tensorflow.keras import datasets, layers, models
-import matplotlib.pyplot as plt
 import numpy as np
-import cv2
 import os
+import cv2
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Flatten, Conv2D, MaxPooling2D, Dropout, BatchNormalization
+from tensorflow.keras.utils import to_categorical
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
-# Load the FER-2013 dataset manually
-def load_fer2013(dataset_path):
-    images, labels = [], []
-    class_names = ["angry", "disgust", "fear", "happy", "neutral", "sad", "surprise"]
+trainDatasetPath = "dataset_FER_2013/train"
+testDatasetPath = "dataset_FER_2013/test"
 
-    with open(dataset_path, 'r') as file:
-        next(file)  # Skip header
-        for line in file:
-            pixels, emotion = line.strip().split(',')[1:]
-            image = np.array(pixels.split(), dtype=np.uint8).reshape(48, 48)  # FER-2013 images are 48x48
-            images.append(image)
-            labels.append(int(emotion))
+categories = ["angry", "happy", "neutral", "sad", "surprise"]
+numClasses = len(categories)
+imageSize = (128, 128)
 
-    images = np.array(images) / 255.0  # Normalize images
-    labels = np.array(labels)
-    return images, labels, class_names
+def load_images_from_folder(folderPath):
+    X, y = [], []
+    for label, category in enumerate(categories):
+        categoryPath = os.path.join(folderPath, category)
+        for filename in os.listdir(categoryPath):
+            imgPath = os.path.join(categoryPath, filename)
+            img = cv2.imread(imgPath, cv2.IMREAD_GRAYSCALE)
+            if img is not None:
+                img = cv2.resize(img, imageSize) / 255.0
+                X.append(img)
+                y.append(label)
+    return np.array(X, dtype=np.float32), np.array(y)
 
-# Update path to your dataset CSV file
-dataset_path = "fer2013.csv"
-images, labels, class_names = load_fer2013(dataset_path)
+XTrain, yTrain = load_images_from_folder(trainDatasetPath)
+XTest, yTest = load_images_from_folder(testDatasetPath)
 
-# Split dataset into training and testing
-num_samples = len(images)
-split_index = int(0.8 * num_samples)  # 80% training, 20% testing
+yTrain = to_categorical(yTrain, numClasses)
+yTest = to_categorical(yTest, numClasses)
 
-train_images, test_images = images[:split_index], images[split_index:]
-train_labels, test_labels = labels[:split_index], labels[split_index:]
+XTrain = XTrain.reshape(-1, imageSize[0], imageSize[1], 1)
+XTest = XTest.reshape(-1, imageSize[0], imageSize[1], 1)
 
-# Reshape images for CNN input
-train_images = train_images.reshape(-1, 48, 48, 1)
-test_images = test_images.reshape(-1, 48, 48, 1)
+# Data augmentation 
+datagen = ImageDataGenerator(
+    rotation_range=15,
+    width_shift_range=0.1,
+    height_shift_range=0.1,
+    horizontal_flip=True
+)
+datagen.fit(XTrain)
 
-# Display some images
-plt.figure(figsize=(10,10))
-for i in range(25):
-    plt.subplot(5,5,i+1)
-    plt.xticks([])
-    plt.yticks([])
-    plt.grid(False)
-    plt.imshow(train_images[i].reshape(48, 48), cmap="gray")
-    plt.xlabel(class_names[train_labels[i]])
-plt.show()
+model = Sequential([
+    Conv2D(32, (3, 3), activation='relu', input_shape=(imageSize[0], imageSize[1], 1)),
+    BatchNormalization(),
+    MaxPooling2D((2, 2)),
 
-# Build CNN Model
-model = models.Sequential([
-    layers.Conv2D(32, (3,3), activation='relu', input_shape=(48, 48, 1)),
-    layers.MaxPooling2D((2,2)),
-    layers.Conv2D(64, (3,3), activation='relu'),
-    layers.MaxPooling2D((2,2)),
-    layers.Conv2D(128, (3,3), activation='relu'),
-    layers.MaxPooling2D((2,2)),
-    layers.Flatten(),
-    layers.Dense(128, activation='relu'),
-    layers.Dropout(0.5),
-    layers.Dense(7, activation='softmax')  # 7 classes in FER-2013
+    Conv2D(64, (3, 3), activation='relu'),
+    BatchNormalization(),
+    MaxPooling2D((2, 2)),
+
+    Conv2D(128, (3, 3), activation='relu'),
+    BatchNormalization(),
+    MaxPooling2D((2, 2)),
+
+    Conv2D(256, (3, 3), activation='relu'),
+    BatchNormalization(),
+    MaxPooling2D((2, 2)),
+    Dropout(0.3),  # Helps prevent overfitting
+
+    Flatten(),
+    Dense(256, activation='relu'),
+    Dropout(0.3),
+    Dense(128, activation='relu'),
+    Dropout(0.2),
+    Dense(numClasses, activation='softmax')
 ])
 
-# Compile the model
-model.compile(optimizer='adam',
-              loss='sparse_categorical_crossentropy',
+model.compile(optimizer=Adam(learning_rate=0.0001),
+              loss='categorical_crossentropy',
               metrics=['accuracy'])
 
-# Train the model
-model.fit(train_images, train_labels, epochs=20, validation_data=(test_images, test_labels))
+model.fit(datagen.flow(XTrain, yTrain, batch_size=64),
+          epochs=50, 
+          validation_data=(XTest, yTest))
 
-# Evaluate the model
-test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=2)
-print(f"\nTest accuracy: {test_acc:.2f}")
+model.save("face_detector_model.h5")
+print("Model training complete, saved as 'face_detector_model.h5'")
+loss, accuracy = model.evaluate(XTest, yTest)
+print(f"Test Accuracy: {accuracy * 100:.2f}%")
