@@ -37,7 +37,6 @@ yTest = to_categorical(yTest, numClasses)
 XTrain = XTrain.reshape(-1, imageSize[0], imageSize[1], 1)
 XTest = XTest.reshape(-1, imageSize[0], imageSize[1], 1)
 
-# Data augmentation 
 datagen = ImageDataGenerator(
     rotation_range=15,
     width_shift_range=0.1,

@@ -3,70 +3,71 @@ import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import seaborn as sns
-import threading
+from cv2.dnn import blobFromImage
 
+# Load the model
 model = tf.keras.models.load_model("face_detector_model.h5")
 model.summary()
 
 categories = ["angry", "happy", "neutral", "sad", "surprise"]
 
+# Load deep learning face detector
+face_net = cv2.dnn.readNetFromCaffe(
+    "deploy.prototxt.txt", "res10_300x300_ssd_iter_140000.caffemodel"
+)
 
 def predict_expression(face_img):
     face_img = cv2.resize(face_img, (128, 128))
     face_img = np.expand_dims(face_img, axis=-1)  
     face_img = np.expand_dims(face_img, axis=0) 
     face_img = face_img / 255.0  
-    print("Processed image shape:", face_img.shape)
-
     predictions = model.predict(face_img)
     return predictions.flatten()
 
 camera_index = 0  
 cap = cv2.VideoCapture(camera_index)
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
 current_probabilities = np.zeros(len(categories))
 
-def update_graph():
-    """Function to update the graph in real-time"""
-    global current_probabilities
-    plt.ion()
-    
-    while True:
-        plt.clf()
-        ax = plt.gca()
-        ax.set_ylim([0, 1])
-        ax.set_ylabel("Probability")
-        ax.set_title("Expression Probabilities")
-        
-        plt.bar(categories, current_probabilities, color=['red', 'yellow', 'blue', 'purple', 'orange'])
-        sns.heatmap([current_probabilities], annot=True, cmap="coolwarm", xticklabels=categories, yticklabels=[""])
-        
-        plt.pause(0.1)
-
-graph_thread = threading.Thread(target=update_graph, daemon=True)
-graph_thread.start()
-
+def draw_heatmap(frame, probabilities):
+    """Draws a heatmap on the camera frame."""
+    heatmap = np.zeros((200, 400, 3), dtype=np.uint8)
+    sns.heatmap([probabilities], annot=True, cmap="coolwarm", xticklabels=categories, yticklabels=[""], ax=plt.gca())
+    plt.savefig("heatmap.png")
+    heatmap_img = cv2.imread("heatmap.png")
+    heatmap_img = cv2.resize(heatmap_img, (400, 100))
+    frame[10:110, 10:410] = heatmap_img
 
 while True:
     ret, frame = cap.read()
     if not ret:
         break
     
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+    h, w = frame.shape[:2]
+    blob = blobFromImage(frame, 1.0, (300, 300), (104.0, 177.0, 123.0))
+    face_net.setInput(blob)
+    detections = face_net.forward()
     
-    for (x, y, w, h) in faces:
-        face_img = gray[y:y+h, x:x+w]
-        expression_probs = predict_expression(face_img)
-        current_probabilities = expression_probs  
-        expression = categories[np.argmax(expression_probs)]
-
-        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-        cv2.putText(frame, expression, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+    for i in range(detections.shape[2]):
+        confidence = detections[0, 0, i, 2]
+        if confidence > 0.5:
+            box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
+            (x, y, x1, y1) = box.astype("int")
+            face_img = frame[y:y1, x:x1]
+            if face_img.size == 0:
+                continue
+            
+            gray_face = cv2.cvtColor(face_img, cv2.COLOR_BGR2GRAY)
+            expression_probs = predict_expression(gray_face)
+            current_probabilities = expression_probs
+            expression = categories[np.argmax(expression_probs)]
+            
+            cv2.rectangle(frame, (x, y), (x1, y1), (0, 255, 0), 2)
+            cv2.putText(frame, expression, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
     
+    draw_heatmap(frame, current_probabilities)
     cv2.imshow("Expression Detector", frame)
-
+    
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
