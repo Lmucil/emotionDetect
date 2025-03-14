@@ -1,22 +1,20 @@
 import cv2
 import numpy as np
 import tensorflow as tf
-import matplotlib.pyplot as plt
-import seaborn as sns
-from cv2.dnn import blobFromImage
+import mediapipe as mp
 
-# Load the model
 model = tf.keras.models.load_model("face_detector_model.h5")
 model.summary()
 
 categories = ["angry", "happy", "neutral", "sad", "surprise"]
 
-# Load deep learning face detector
-face_net = cv2.dnn.readNetFromCaffe(
-    "deploy.prototxt.txt", "res10_300x300_ssd_iter_140000.caffemodel"
-)
+mp_face_detection = mp.solutions.face_detection
+face_detection = mp_face_detection.FaceDetection(min_detection_confidence=0.3)
 
 def predict_expression(face_img):
+    if face_img.shape[0] == 0 or face_img.shape[1] == 0:
+        return np.zeros(len(categories))  
+    
     face_img = cv2.resize(face_img, (128, 128))
     face_img = np.expand_dims(face_img, axis=-1)  
     face_img = np.expand_dims(face_img, axis=0) 
@@ -26,51 +24,59 @@ def predict_expression(face_img):
 
 camera_index = 0  
 cap = cv2.VideoCapture(camera_index)
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 800)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 600)
+cv2.namedWindow("Expression Detector", cv2.WINDOW_NORMAL)  
+cv2.namedWindow("Expression Probabilities", cv2.WINDOW_NORMAL)  
 
 current_probabilities = np.zeros(len(categories))
 
-def draw_heatmap(frame, probabilities):
-    """Draws a heatmap on the camera frame."""
-    heatmap = np.zeros((200, 400, 3), dtype=np.uint8)
-    sns.heatmap([probabilities], annot=True, cmap="coolwarm", xticklabels=categories, yticklabels=[""], ax=plt.gca())
-    plt.savefig("heatmap.png")
-    heatmap_img = cv2.imread("heatmap.png")
-    heatmap_img = cv2.resize(heatmap_img, (400, 100))
-    frame[10:110, 10:410] = heatmap_img
-
-while True:
+while cap.isOpened():  
     ret, frame = cap.read()
     if not ret:
-        break
+        continue  
     
-    h, w = frame.shape[:2]
-    blob = blobFromImage(frame, 1.0, (300, 300), (104.0, 177.0, 123.0))
-    face_net.setInput(blob)
-    detections = face_net.forward()
+    h, w, _ = frame.shape
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    results = face_detection.process(rgb_frame)
     
-    for i in range(detections.shape[2]):
-        confidence = detections[0, 0, i, 2]
-        if confidence > 0.5:
-            box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
-            (x, y, x1, y1) = box.astype("int")
-            face_img = frame[y:y1, x:x1]
-            if face_img.size == 0:
-                continue
+    updated_probabilities = np.zeros(len(categories))
+    face_detected = False
+    
+    if results.detections:
+        for detection in results.detections:
+            bboxC = detection.location_data.relative_bounding_box
+            x, y, w_box, h_box = int(bboxC.xmin * w), int(bboxC.ymin * h), int(bboxC.width * w), int(bboxC.height * h)
+            face_img = frame[y:y+h_box, x:x+w_box]
             
-            gray_face = cv2.cvtColor(face_img, cv2.COLOR_BGR2GRAY)
-            expression_probs = predict_expression(gray_face)
-            current_probabilities = expression_probs
-            expression = categories[np.argmax(expression_probs)]
-            
-            cv2.rectangle(frame, (x, y), (x1, y1), (0, 255, 0), 2)
-            cv2.putText(frame, expression, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+            if face_img.shape[0] > 0 and face_img.shape[1] > 0:
+                gray_face = cv2.cvtColor(face_img, cv2.COLOR_BGR2GRAY)
+                expression_probs = predict_expression(gray_face)
+                updated_probabilities = np.maximum(updated_probabilities, expression_probs)
+                face_detected = True
+                expression = categories[np.argmax(expression_probs)]
+                
+                cv2.rectangle(frame, (x, y), (x + w_box, y + h_box), (0, 255, 0), 2)
+                cv2.putText(frame, expression, (x, y - 10), cv2.FONT_HERSHEY_TRIPLEX, 0.8, (0, 255, 0), 2)
     
-    draw_heatmap(frame, current_probabilities)
+    if face_detected:
+        current_probabilities = updated_probabilities
+    else:
+        current_probabilities *= 0.9  
+    
+    prob_display = np.zeros((300, 400, 3), dtype=np.uint8)
+    y_offset = 50
+    for i, category in enumerate(categories):
+        prob_text = f"{category}: {current_probabilities[i]:.2f}"
+        cv2.putText(prob_display, prob_text, (20, y_offset), cv2.FONT_HERSHEY_TRIPLEX, 0.8, (0, 255, 255), 2)
+        y_offset += 40
+    
+
     cv2.imshow("Expression Detector", frame)
+    cv2.imshow("Expression Probabilities", prob_display)
     
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
 cap.release()
 cv2.destroyAllWindows()
-plt.ioff()
