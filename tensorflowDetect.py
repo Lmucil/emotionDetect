@@ -68,7 +68,7 @@ while cap.isOpened():
     y_offset = 50
     for i, category in enumerate(categories):
         prob_text = f"{category}: {current_probabilities[i]:.2f}"
-        cv2.putText(prob_display, prob_text, (20, y_offset), cv2.FONT_HERSHEY_TRIPLEX, 0.8, (0, 255, 255), 2)
+        cv2.putText(prob_display, prob_text, (20, y_offset), cv2.FONT_HERSHEY_TRIPLEX, 0.8, (0, 0, 255), 2)
         y_offset += 40
     
 
