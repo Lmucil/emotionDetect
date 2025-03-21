@@ -7,3 +7,5 @@ For anyone curious the final ones that works the best are
 [tensorflowDetect.py](https://github.com/Lmucil/emotionDetect/blob/a6e0bcb2b78b3ca53c7ed420d2cf662d1c64153f/tensorflowDetect.py) for actual detecting
 
 rest are trash. just record for my personal project.
+
+Leave a star if you liked this
