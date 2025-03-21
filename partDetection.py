@@ -78,25 +78,20 @@ def load_images_with_features(folderPath):
     
     return np.array(X_face, dtype=np.float32), np.array(X_eyes, dtype=np.float32), np.array(X_mouth, dtype=np.float32), np.array(y)
 
-# Load Train & Test Data
 XFaceTrain, XEyesTrain, XMouthTrain, yTrain = load_images_with_features(trainDatasetPath)
 XFaceTest, XEyesTest, XMouthTest, yTest = load_images_with_features(testDatasetPath)
 
-# Convert Labels to Categorical
 yTrain = to_categorical(yTrain, numClasses)
 yTest = to_categorical(yTest, numClasses)
 
-# Reshape Data for CNN
 XFaceTrain = XFaceTrain.reshape(-1, faceSize[0], faceSize[1], 1)
 XFaceTest = XFaceTest.reshape(-1, faceSize[0], faceSize[1], 1)
-XEyesTrain = XEyesTrain.reshape(-1, 2, eyeSize[0], eyeSize[1], 1)  # 2 eyes per image
+XEyesTrain = XEyesTrain.reshape(-1, 2, eyeSize[0], eyeSize[1], 1) 
 XEyesTest = XEyesTest.reshape(-1, 2, eyeSize[0], eyeSize[1], 1)
 XMouthTrain = XMouthTrain.reshape(-1, mouthSize[0], mouthSize[1], 1)
 XMouthTest = XMouthTest.reshape(-1, mouthSize[0], mouthSize[1], 1)
 
-# Define the CNN Model with Three Input Streams
 def build_model():
-    # Face Branch
     input_face = Input(shape=(128, 128, 1))
     x = Conv2D(32, (3, 3), activation='relu')(input_face)
     x = MaxPooling2D((2, 2))(x)
@@ -105,14 +100,11 @@ def build_model():
     x = Flatten()(x)
     face_output = Dense(128, activation='relu')(x)
 
-    # Eyes Branch (Processing Each Eye Separately)
-    input_eyes = Input(shape=(2, 32, 32, 1))  # Two eyes per image
+    input_eyes = Input(shape=(2, 32, 32, 1))  
     
-    # Reshape (Split into two separate (32,32,1) inputs)
     left_eye = Reshape((32, 32, 1))(input_eyes[:, 0, :, :, :])  
     right_eye = Reshape((32, 32, 1))(input_eyes[:, 1, :, :, :])
 
-    # Apply Conv2D to each eye separately
     left_eye_features = Conv2D(16, (3, 3), activation='relu')(left_eye)
     left_eye_features = MaxPooling2D((2, 2))(left_eye_features)
     left_eye_features = Flatten()(left_eye_features)
@@ -121,40 +113,32 @@ def build_model():
     right_eye_features = MaxPooling2D((2, 2))(right_eye_features)
     right_eye_features = Flatten()(right_eye_features)
 
-    # Merge both eyes
     eyes_output = Concatenate()([left_eye_features, right_eye_features])
     eyes_output = Dense(64, activation='relu')(eyes_output)
 
-    # Mouth Branch
     input_mouth = Input(shape=(64, 32, 1))
     z = Conv2D(16, (3, 3), activation='relu')(input_mouth)
     z = MaxPooling2D((2, 2))(z)
     z = Flatten()(z)
     mouth_output = Dense(64, activation='relu')(z)
 
-    # Combine Face, Eyes & Mouth Features
     combined = Concatenate()([face_output, eyes_output, mouth_output])
     final = Dense(128, activation='relu')(combined)
     final = Dropout(0.3)(final)
     final = Dense(5, activation='softmax')(final)
 
-    # Create Model
     model = Model(inputs=[input_face, input_eyes, input_mouth], outputs=final)
     return model
 
-# Compile Model
 model = build_model()
 model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
               loss='categorical_crossentropy',
               metrics=['accuracy'])
 
-# Train Model
 model.fit([XFaceTrain, XEyesTrain, XMouthTrain], yTrain, epochs=50, batch_size=64, validation_data=([XFaceTest, XEyesTest, XMouthTest], yTest))
 
-# Save Model
 model.save("face_emotion_model.keras")
 print("Model training complete, saved as 'face_emotion_model_tf'")
 
-# Evaluate Model
 loss, accuracy = model.evaluate([XFaceTest, XEyesTest, XMouthTest], yTest)
 print(f"Test Accuracy: {accuracy * 100:.2f}%")

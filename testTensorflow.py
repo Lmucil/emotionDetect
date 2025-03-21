@@ -7,6 +7,7 @@ from tensorflow.keras.layers import Dense, Flatten, Conv2D, MaxPooling2D, Dropou
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
+import matplotlib.pyplot as plt
 
 trainDatasetPath = "dataset_FER_2013/train"
 testDatasetPath = "dataset_FER_2013/test"
@@ -75,11 +76,40 @@ model.compile(optimizer=Adam(learning_rate=0.0001),
               loss='categorical_crossentropy',
               metrics=['accuracy'])
 
-model.fit(datagen.flow(XTrain, yTrain, batch_size=64),
-          epochs=50, 
-          validation_data=(XTest, yTest))
+history = model.fit(datagen.flow(XTrain, yTrain, batch_size=64),
+                    epochs=50, 
+                    validation_data=(XTest, yTest))
 
-model.save("face_detector_model.h5")
-print("Model training complete, saved as 'face_detector_model.h5'")
+model.save("emotion_detector_model2.h5")
+print("Model training complete, saved as 'emotion_detector_model.h5'")
 loss, accuracy = model.evaluate(XTest, yTest)
 print(f"Test Accuracy: {accuracy * 100:.2f}%")
+
+# 損失
+epochs = range(1, len(history.history['loss']) + 1)
+plt.figure(figsize=(8, 5))
+plt.plot(epochs, history.history['loss'], marker='o', linestyle='-', color='blue', label='Training Loss')
+plt.plot(epochs, history.history['val_loss'], marker='o', linestyle='-', color='red', label='Validation Loss')
+plt.xlabel("Epochs")
+plt.ylabel("Loss")
+plt.title("Loss Function Over Training Epochs")
+plt.legend()
+plt.grid(True)
+plt.show()
+
+
+#accuracy
+epochs = range(1, len(history.history['accuracy']) + 1)
+train_accuracy = history.history['accuracy']
+val_accuracy = history.history['val_accuracy']
+
+plt.figure(figsize=(10, 5))
+plt.plot(epochs, train_accuracy, label='Training Accuracy', marker='o', linestyle='-', markersize=4, color='blue')
+plt.plot(epochs, val_accuracy, label='Validation Accuracy', marker='s', linestyle='--', markersize=4, color='red')
+plt.xlabel("Epochs")
+plt.ylabel("Accuracy")
+plt.title("Training vs Validation Accuracy")
+plt.legend()
+plt.grid(True)
+plt.ylim(0, 1)  
+plt.show()
